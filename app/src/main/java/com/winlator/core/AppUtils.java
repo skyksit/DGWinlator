@@ -34,6 +34,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.tabs.TabLayout;
+import com.winlator.BuildConfig;
 import com.winlator.R;
 import com.winlator.SettingsFragment;
 
@@ -44,7 +45,8 @@ import java.util.TimerTask;
 
 public abstract class AppUtils {
     public static final String DIRECTORY_DOWNLOADS = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getPath();
-    public static final String INTERNAL_STORAGE = "/data/data/com.winlator/storage";
+    // Derived from the applicationId so the fork points at its own data dir instead of stock Winlator's.
+    public static final String INTERNAL_STORAGE = "/data/data/"+BuildConfig.APPLICATION_ID+"/storage";
     private static WeakReference<Toast> globalToastReference = null;
 
     public static class RestartApplicationOptions {

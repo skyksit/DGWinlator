@@ -417,6 +417,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (environment != null) environment.stopEnvironmentComponents();
 
         Intent intent = getIntent();
+        // Launched by DGPlayer: just end this task so the caller's app comes back to the foreground.
+        // Restarting into MainActivity would strand the user in Winlator's container list instead of
+        // returning them to the game library they pressed Play from.
+        if (intent.getBooleanExtra("from_bridge", false)) {
+            setResult(RESULT_OK);
+            finish();
+            return;
+        }
+
         if (intent.hasExtra("exec_path")) {
             AppUtils.RestartApplicationOptions options = new AppUtils.RestartApplicationOptions();
             options.containerId = container.id;
@@ -570,7 +579,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         renderer.setCursorVisible(false);
         renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
         renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
-        renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
+        // The DGPlayer bridge launches by exec_path with no shortcut, so it passes the flag directly.
+        renderer.setForceWindowsFullscreen(shortcut != null
+                ? shortcut.getExtra("forceFullscreen", "0").equals("1")
+                : getIntent().getBooleanExtra("force_fullscreen", false));
 
         xServer.setRenderer(renderer);
         rootView.addView(xServerView);
@@ -603,6 +615,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             String controlsProfile = shortcut.getExtra("controlsProfile");
             if (!controlsProfile.isEmpty()) {
                 ControlsProfile profile = inputControlsManager.getProfile(Integer.parseInt(controlsProfile));
+                if (profile != null) showInputControls(profile);
+            }
+        }
+        else {
+            // DGPlayer bridge launches have no shortcut; the profile id arrives as an intent extra
+            // (imported from the game package's .icp by GameLaunchActivity).
+            int controlsProfileId = getIntent().getIntExtra("controls_profile", 0);
+            if (controlsProfileId > 0) {
+                ControlsProfile profile = inputControlsManager.getProfile(controlsProfileId);
                 if (profile != null) showInputControls(profile);
             }
         }

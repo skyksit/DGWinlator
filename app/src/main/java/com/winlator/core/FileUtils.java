@@ -11,6 +11,8 @@ import android.system.Os;
 
 import androidx.core.content.FileProvider;
 
+import com.winlator.BuildConfig;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
@@ -410,7 +412,7 @@ public abstract class FileUtils {
         Intent intent;
         if (path.startsWith("file://")) {
             File file = new File(Uri.decode(path.replace("file://", "")));
-            intent = new Intent(Intent.ACTION_VIEW, FileProvider.getUriForFile(activity, "com.winlator.FileProvider", file));
+            intent = new Intent(Intent.ACTION_VIEW, FileProvider.getUriForFile(activity, BuildConfig.APPLICATION_ID+".FileProvider", file));
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
         else intent = new Intent(Intent.ACTION_VIEW, Uri.parse(path));

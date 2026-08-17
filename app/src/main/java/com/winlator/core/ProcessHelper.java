@@ -2,6 +2,7 @@ package com.winlator.core;
 
 import android.os.Process;
 import android.system.Os;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -23,6 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 public abstract class ProcessHelper {
+    private static final String TAG = "WinlatorProcess";
     public enum PState {RUNNING, SLEEPING, WAITING, ZOMBIE, STOPPED, DEAD, OTHER}
     private static final ArrayList<Callback<String>> debugCallbacks = new ArrayList<>();
     private static final byte SIGCONT = 18;
@@ -84,7 +86,12 @@ public abstract class ProcessHelper {
 
             if (terminationCallback != null) createWaitForThread(process, terminationCallback);
         }
-        catch (Exception e) {}
+        catch (Exception e) {
+            // Swallowing this made a failed guest launch indistinguishable from a slow one: the
+            // preloader just sits on "Starting up..." forever. Anything driving the app headlessly
+            // (the DGPlayer bridge) has no other way to see it.
+            Log.e(TAG, "exec failed: "+command, e);
+        }
         return pid;
     }
 
@@ -95,6 +102,9 @@ public abstract class ProcessHelper {
                 while ((line = reader.readLine()) != null) {
                     synchronized (debugCallbacks) {
                         if (!debugCallbacks.isEmpty()) {
+                            // Mirrored to logcat so guest output is reachable over adb, not just
+                            // through the in-app log dialog.
+                            Log.d(TAG, line);
                             for (Callback<String> callback : debugCallbacks) callback.call(line);
                         }
                         else if (MainActivity.DEBUG_MODE) System.out.println(line);

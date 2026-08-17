@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
 
+    <!-- DGPlayer bridge: only apps signed with the same certificate (i.e. dsam3) may launch games. -->
+    <permission
+        android:name="com.winlator.permission.LAUNCH_GAME"
+        android:protectionLevel="signature"/>
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:appCategory="game"
@@ -39,6 +44,25 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation"
             android:screenOrientation="sensorLandscape" />
 
+        <!--
+            DGPlayer bridge entry point. XServerDisplayActivity is exported="false" upstream and
+            MainActivity cannot start a game, so this is the only way an external app can launch one.
+            Caller identity is enforced in code (signature match, see GameLaunchActivity.isCallerTrusted)
+            rather than via android:permission, so the contract stays testable with `adb shell am start`.
+            Release hardening: also add android:permission="com.winlator.permission.LAUNCH_GAME".
+        -->
+        <activity android:name="com.winlator.bridge.GameLaunchActivity"
+            android:exported="true"
+            android:theme="@style/AppThemeDark"
+            android:excludeFromRecents="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation">
+            <intent-filter>
+                <action android:name="com.winlator.action.PLAY_GAME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+
         <activity android:name="com.winlator.ControlsEditorActivity"
             android:exported="false"
             android:theme="@style/AppThemeFullscreenDark"
@@ -51,7 +75,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.winlator.FileProvider"
+            android:authorities="${applicationId}.FileProvider"
             android:exported="false"
             android:grantUriPermissions="true">
 

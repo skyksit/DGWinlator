@@ -1,14 +1,54 @@
 apply plugin: 'com.android.application'
 
+// GameLaunchActivity only accepts callers signed with our certificate, so debug builds have to be
+// signed with the same keystore DGPlayer uses or the bridge rejects it. Point local.properties at it:
+//   dgp.debug.keystore=D:/studyspace/dgplayer-app/dsam3/debug.keystore
+// Left unset, this falls back to the stock Android debug key and only adb launches will work.
+def dgpDebugKeystore = null
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    def localProps = new Properties()
+    localPropsFile.withInputStream { localProps.load(it) }
+    def path = localProps.getProperty('dgp.debug.keystore')
+    if (path != null && !path.trim().isEmpty()) {
+        def candidate = file(path.trim())
+        if (candidate.exists()) dgpDebugKeystore = candidate
+        else logger.warn("dgp.debug.keystore points at a missing file: ${candidate}")
+    }
+}
+
 android {
     compileSdk 34
 
     defaultConfig {
+        // Must stay 'com.winlator'. The prebuilt rootfs is not relocatable: every glibc binary in it
+        // (box64, wine, wineserver, ...) has its ELF interpreter hardcoded to
+        // /data/data/com.winlator/files/rootfs/lib/ld-linux-aarch64.so.1, and ld.so.cache plus
+        // several configs embed the same prefix. Under any other applicationId execve() fails with
+        // ENOENT before a single guest process starts. Verified on device, 2026-08-17.
+        //
+        // Consequence: this fork replaces stock Winlator rather than coexisting with it, and a device
+        // that already has the upstream APK must uninstall it first (same package, different signer).
+        // A coexisting build would need an applicationId of exactly the same byte length
+        // (e.g. 'com.dgplayer') plus an install-time pass that rewrites those embedded paths in place.
         applicationId 'com.winlator'
         minSdkVersion 26
+        // Must stay 28. Winlator execve()s proot/box64/wine out of filesDir, which Android 10+
+        // (targetSdk 29+) blocks as a W^X violation. This is a functional requirement, not laziness.
         targetSdkVersion 28
         versionCode 28
         versionName "11.1"
+    }
+
+    signingConfigs {
+        debug {
+            if (dgpDebugKeystore != null) {
+                storeFile dgpDebugKeystore
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
     }
 
     buildTypes {
@@ -24,6 +64,32 @@ android {
 
     lintOptions {
         checkReleaseBuilds false
+    }
+
+    // midihandler/CMakeLists.txt declares the prebuilt jniLibs as SHARED IMPORTED targets, so
+    // CMake stages its own copy of each one next to the merged jniLibs output and the merge task
+    // aborts on the duplicate. Both copies are the same file, so first-wins is the right call.
+    // https://developer.android.com/r/tools/jniLibs-vs-imported-targets
+    packagingOptions {
+        pickFirst 'lib/**/libc++_shared.so'
+        pickFirst 'lib/**/libFLAC.so'
+        pickFirst 'lib/**/libfluidsynth.so'
+        pickFirst 'lib/**/libfluidsynth-assetloader.so'
+        pickFirst 'lib/**/libgio-2.0.so'
+        pickFirst 'lib/**/libglib-2.0.so'
+        pickFirst 'lib/**/libgmodule-2.0.so'
+        pickFirst 'lib/**/libgobject-2.0.so'
+        pickFirst 'lib/**/libgthread-2.0.so'
+        pickFirst 'lib/**/libinstpatch-1.0.so'
+        pickFirst 'lib/**/liboboe.so'
+        pickFirst 'lib/**/libogg.so'
+        pickFirst 'lib/**/libopus.so'
+        pickFirst 'lib/**/libpcre.so'
+        pickFirst 'lib/**/libpcreposix.so'
+        pickFirst 'lib/**/libsndfile.so'
+        pickFirst 'lib/**/libvorbis.so'
+        pickFirst 'lib/**/libvorbisenc.so'
+        pickFirst 'lib/**/libvorbisfile.so'
     }
 
     ndkVersion '24.0.8215888'

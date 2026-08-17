@@ -348,4 +348,8 @@
     <string name="ddraw_wrapper" translatable="false">DDraw Wrapper</string>
     <string name="renderer">Renderer</string>
     <string name="default_no_override">Default (No override)</string>
+
+    <!-- DGPlayer bridge -->
+    <string name="dgp_setup_required">Finish the first-time setup before launching a game from DGPlayer.</string>
+    <string name="dgp_installing_game">Installing game...</string>
 </resources>
