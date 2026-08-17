@@ -1,7 +1,9 @@
 [submodule "app"]
 	path = app
-	url = https://github.com/brunodev85/winlator-app
-	branch = main
+	# DGPlayer 포크: 브리지 커밋이 upstream(winlator-app)에는 없으므로,
+	# 같은 저장소의 dgplayer-bridge 브랜치(무관 히스토리)를 서브모듈로 가리킨다.
+	url = https://github.com/skyksit/DGWinlator.git
+	branch = dgplayer-bridge
 [submodule "vortek"]
 	path = vortek
 	url = https://github.com/brunodev85/vortek
