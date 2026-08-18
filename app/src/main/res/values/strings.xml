@@ -352,4 +352,5 @@
     <!-- DGPlayer bridge -->
     <string name="dgp_setup_required">Finish the first-time setup before launching a game from DGPlayer.</string>
     <string name="dgp_installing_game">Installing game...</string>
+    <string name="change_disc">Change Disc</string>
 </resources>

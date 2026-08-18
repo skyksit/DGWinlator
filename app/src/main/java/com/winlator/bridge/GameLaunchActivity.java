@@ -38,6 +38,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 
 /**
@@ -226,6 +230,7 @@ public class GameLaunchActivity extends AppCompatActivity {
         }
 
         int controlsProfileId = importControlsProfile(manifest, gameDir);
+        String[][] cdDiscs = prepareCdDiscs(manifest, gameDir);
 
         // XServerDisplayActivity splits arguments off the executable name when the file name contains
         // a space after its extension (see getWineStartCommand), so appending them here is enough.
@@ -244,6 +249,10 @@ public class GameLaunchActivity extends AppCompatActivity {
         intent.putExtra("from_bridge", true);
         if (controlsProfileId > 0) intent.putExtra("controls_profile", controlsProfileId);
         intent.putExtra("force_fullscreen", forceFullscreen);
+        if (cdDiscs != null) {
+            intent.putExtra("cd_paths", cdDiscs[0]);
+            intent.putExtra("cd_labels", cdDiscs[1]);
+        }
 
         handler.post(() -> {
             preloaderDialog.close();
@@ -360,6 +369,55 @@ public class GameLaunchActivity extends AppCompatActivity {
             Log.w(TAG, "bad controls profile "+relativePath, e);
             return 0;
         }
+    }
+
+    /**
+     * Validates the manifest's {@code cd=} entries and stamps each disc folder with the
+     * {@code .windows-label}/{@code .windows-serial} files Wine reads as the volume label and
+     * serial of a directory-backed cdrom drive.
+     *
+     * <p>Games see a single CD-ROM drive, the way a real PC ran multi-disc titles:
+     * {@code XServerDisplayActivity} points X: at the first disc before Wine starts and re-points
+     * the {@code dosdevices/x:} symlink when the user swaps discs from the in-game drawer menu.
+     *
+     * @return {paths[], labels[]} for the launch intent, or null when the manifest declares no
+     *         usable disc
+     */
+    private String[][] prepareCdDiscs(GameManifest manifest, File gameDir) {
+        List<String[]> cds = manifest.getCds();
+        if (cds.isEmpty()) return null;
+
+        List<String> paths = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        for (String[] cd : cds) {
+            File dir = new File(gameDir, cd[0].replace('\\', '/'));
+            try {
+                // Same guard as the payload extraction: the manifest is attacker-controlled text
+                // and a disc path must not reach outside the game's own folder.
+                if (!dir.getCanonicalPath().startsWith(gameDir.getCanonicalPath()+File.separator)
+                        || !dir.isDirectory()) {
+                    Log.w(TAG, "skipping cd entry, unusable: "+cd[0]);
+                    continue;
+                }
+            }
+            catch (IOException e) {
+                Log.w(TAG, "skipping cd entry, unresolvable: "+cd[0], e);
+                continue;
+            }
+
+            String label = cd[1] != null ? cd[1] : dir.getName();
+            FileUtils.writeString(new File(dir, ".windows-label"), label+"\n");
+            // Distinct serials per disc, so a game that remembers discs by serial can tell them
+            // apart. Same format WineUtils uses for the container's stock drive_x.
+            String serial = String.format(Locale.ENGLISH, "%-8x", (int)'X'+paths.size()).replace(' ', '0');
+            FileUtils.writeString(new File(dir, ".windows-serial"), serial+"\n");
+
+            paths.add(dir.getAbsolutePath());
+            labels.add(label);
+        }
+
+        if (paths.isEmpty()) return null;
+        return new String[][]{paths.toArray(new String[0]), labels.toArray(new String[0])};
     }
 
     /**

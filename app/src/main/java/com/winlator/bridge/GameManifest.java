@@ -26,15 +26,23 @@ import java.util.Map;
  * install would have dropped them there — so a package needs a way to say "this file belongs
  * outside my folder":
  * <pre>copy=Sizuku/Sizuku.ini -&gt; C:\windows\Sizuku.ini</pre>
+ *
+ * <p>{@code cd} may also repeat, one line per disc in disc order. Each names a folder inside the
+ * game directory holding that disc's file tree, optionally with the volume label the game expects:
+ * <pre>cd=CD1 -&gt; FF8_DISC1</pre>
+ * The discs share the container's single CD-ROM drive (X:) and are swapped from the in-game menu,
+ * mirroring how multi-disc games ran on a one-drive PC.
  */
 class GameManifest {
     static final String FILENAME = "dgplayer.ini";
     private static final String KEY_COPY = "copy";
     private static final String KEY_REG = "reg";
+    private static final String KEY_CD = "cd";
 
     private final Map<String, String> values = new HashMap<>();
     private final List<String[]> copies = new ArrayList<>();
     private final List<String> regFiles = new ArrayList<>();
+    private final List<String[]> cds = new ArrayList<>();
 
     private GameManifest() {}
 
@@ -63,6 +71,13 @@ class GameManifest {
                 }
             }
             else if (key.equals(KEY_REG)) manifest.regFiles.add(value);
+            else if (key.equals(KEY_CD)) {
+                // cd=<dir relative to the game folder> [-> <volume label>], repeatable in disc order.
+                int arrow = value.indexOf("->");
+                String dir = (arrow > 0 ? value.substring(0, arrow) : value).trim();
+                String label = arrow > 0 ? value.substring(arrow+2).trim() : "";
+                if (!dir.isEmpty()) manifest.cds.add(new String[]{dir, label.isEmpty() ? null : label});
+            }
             else manifest.values.put(key, value);
         }
         return manifest;
@@ -76,6 +91,11 @@ class GameManifest {
     /** {@code .reg} files, relative to the game directory, to merge into the prefix before launch. */
     List<String> getRegFiles() {
         return regFiles;
+    }
+
+    /** Each entry is {discDirRelativeToGameDir, volumeLabelOrNull}, in disc order. */
+    List<String[]> getCds() {
+        return cds;
     }
 
     String get(String key) {

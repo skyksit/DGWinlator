@@ -135,6 +135,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private int frameRatingWindowId = -1;
     private Win32AppWorkarounds win32AppWorkarounds;
     private String screenEffectProfile;
+    // Multi-disc games from the DGPlayer bridge: the container's single CD-ROM drive (X:) holds
+    // one of these disc folders at a time, swapped via the drawer menu like a physical drive.
+    private String[] cdPaths;
+    private String[] cdLabels;
+    private int currentCdIndex = 0;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -159,6 +164,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (enableLogs) ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
         Menu menu = navigationView.getMenu();
         menu.findItem(R.id.menu_item_logs).setVisible(enableLogs);
+        cdPaths = getIntent().getStringArrayExtra("cd_paths");
+        cdLabels = getIntent().getStringArrayExtra("cd_labels");
+        // Swapping only means anything with two or more discs; single-CD games stay menu-free.
+        menu.findItem(R.id.menu_item_change_disc).setVisible(cdPaths != null && cdPaths.length > 1);
         navigationView.setNavigationItemSelectedListener(this);
 
         rootFS = RootFS.find(this);
@@ -401,6 +410,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             case R.id.menu_item_touchpad_help:
                 showTouchpadHelpDialog();
                 break;
+            case R.id.menu_item_change_disc:
+                showChangeDiscDialog();
+                drawerLayout.closeDrawers();
+                break;
             case R.id.menu_item_exit:
                 exit();
                 break;
@@ -466,6 +479,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         WineStartMenuCreator.create(this, container);
         WineUtils.createDosdevicesSymlinks(container, true);
+        // createDosdevicesSymlinks just pointed X: at the empty stock drive_x; insert disc 1
+        // before Wine starts so a CD check passes from the very first frame.
+        if (cdPaths != null && cdPaths.length > 0) insertCd(currentCdIndex);
 
         String startupSelection = String.valueOf(container.getStartupSelection());
         if (!startupSelection.equals(container.getExtra("startupSelection")) || wineprefixWasUpdated) {
@@ -794,6 +810,27 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         dialog.setIcon(R.drawable.icon_help);
         dialog.findViewById(R.id.BTCancel).setVisibility(View.GONE);
         dialog.show();
+    }
+
+    /**
+     * Points the container's CD-ROM drive (X:) at the given disc folder — the software equivalent
+     * of swapping the disc in a one-drive PC. Wine's mountmgr re-reads the dosdevices symlink and
+     * the disc's {@code .windows-label}/{@code .windows-serial} on its next drive query, so no
+     * restart is needed.
+     */
+    private void insertCd(int index) {
+        currentCdIndex = index;
+        FileUtils.symlink(cdPaths[index], new File(container.getRootDir(), ".wine/dosdevices/x:").getPath());
+    }
+
+    private void showChangeDiscDialog() {
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.change_disc)
+            .setSingleChoiceItems(cdLabels, currentCdIndex, (dialog, which) -> {
+                if (which != currentCdIndex) insertCd(which);
+                dialog.dismiss();
+            })
+            .show();
     }
 
     @Override
