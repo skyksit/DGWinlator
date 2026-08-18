@@ -4,17 +4,18 @@ apply plugin: 'com.android.application'
 // signed with the same keystore DGPlayer uses or the bridge rejects it. Point local.properties at it:
 //   dgp.debug.keystore=D:/studyspace/dgplayer-app/dsam3/debug.keystore
 // Left unset, this falls back to the stock Android debug key and only adb launches will work.
-def dgpDebugKeystore = null
+def localProps = new Properties()
 def localPropsFile = rootProject.file('local.properties')
 if (localPropsFile.exists()) {
-    def localProps = new Properties()
     localPropsFile.withInputStream { localProps.load(it) }
-    def path = localProps.getProperty('dgp.debug.keystore')
-    if (path != null && !path.trim().isEmpty()) {
-        def candidate = file(path.trim())
-        if (candidate.exists()) dgpDebugKeystore = candidate
-        else logger.warn("dgp.debug.keystore points at a missing file: ${candidate}")
-    }
+}
+
+def dgpDebugKeystore = null
+def dgpDebugKeystorePath = localProps.getProperty('dgp.debug.keystore')
+if (dgpDebugKeystorePath != null && !dgpDebugKeystorePath.trim().isEmpty()) {
+    def candidate = file(dgpDebugKeystorePath.trim())
+    if (candidate.exists()) dgpDebugKeystore = candidate
+    else logger.warn("dgp.debug.keystore points at a missing file: ${candidate}")
 }
 
 android {
@@ -39,11 +40,38 @@ android {
         versionName "11.1"
     }
 
-    // Release signing comes from the environment so CI (GitHub Actions) can inject the keystore
-    // without it ever living in the repo. GameLaunchActivity's signature check means the bridge
-    // only works if this keystore matches the one DGPlayer is signed with — a CI fallback key
-    // produces an installable APK, but bridge launches will be rejected.
-    def releaseKeystorePath = System.getenv('DGW_KEYSTORE_FILE')
+    // Release builds are signed with the same key dsam3/retrople releases use
+    // (~/.android/skyksit.keystore), so GameLaunchActivity's signature check accepts bridge
+    // launches from the release DGPlayer. This repo is public, so the credentials must never
+    // be hardcoded here: CI injects everything via DGW_* environment variables, and local
+    // builds fall back to the shared keystore with credentials read from local.properties
+    // (gitignored):
+    //   dgw.release.storePassword=...
+    //   dgw.release.keyPassword=...   (defaults to storePassword)
+    //   dgw.release.keyAlias=...      (defaults to 'skyksit')
+    def releaseStoreFile = null
+    def releaseStorePassword = System.getenv('DGW_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('DGW_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('DGW_KEY_PASSWORD')
+
+    def envKeystorePath = System.getenv('DGW_KEYSTORE_FILE')
+    if (envKeystorePath != null && !envKeystorePath.trim().isEmpty()) {
+        releaseStoreFile = file(envKeystorePath.trim())
+    } else {
+        def sharedKeystore = new File(System.getProperty('user.home'), '.android/skyksit.keystore')
+        if (sharedKeystore.exists()) {
+            releaseStoreFile = sharedKeystore
+            if (releaseStorePassword == null) releaseStorePassword = localProps.getProperty('dgw.release.storePassword')
+            if (releaseKeyAlias == null) releaseKeyAlias = localProps.getProperty('dgw.release.keyAlias', 'skyksit')
+            if (releaseKeyPassword == null) releaseKeyPassword = localProps.getProperty('dgw.release.keyPassword', releaseStorePassword)
+        }
+    }
+    def releaseSigningReady = releaseStoreFile != null && releaseStorePassword != null &&
+            releaseKeyAlias != null && releaseKeyPassword != null
+    if (releaseStoreFile != null && !releaseSigningReady) {
+        logger.warn('Release keystore found but credentials are missing - release APK will be unsigned. ' +
+                'Set dgw.release.storePassword in local.properties or the DGW_* environment variables.')
+    }
 
     signingConfigs {
         debug {
@@ -55,11 +83,11 @@ android {
             }
         }
         release {
-            if (releaseKeystorePath != null && !releaseKeystorePath.trim().isEmpty()) {
-                storeFile file(releaseKeystorePath.trim())
-                storePassword System.getenv('DGW_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('DGW_KEY_ALIAS')
-                keyPassword System.getenv('DGW_KEY_PASSWORD')
+            if (releaseSigningReady) {
+                storeFile releaseStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
             }
         }
     }
@@ -77,7 +105,7 @@ android {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
 
-            if (releaseKeystorePath != null && !releaseKeystorePath.trim().isEmpty()) {
+            if (releaseSigningReady) {
                 signingConfig signingConfigs.release
             }
 
