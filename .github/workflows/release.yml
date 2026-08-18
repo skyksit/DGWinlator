@@ -29,6 +29,8 @@ jobs:
 
       - name: Install NDK and CMake
         run: |
+          # sdkmanager needs Java 17+; the build itself stays on the JDK 11 set up above (AGP 7.2.2).
+          export JAVA_HOME="$JAVA_HOME_17_X64"
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" "ndk;24.0.8215888" "cmake;3.22.1"
