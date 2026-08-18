@@ -39,6 +39,12 @@ android {
         versionName "11.1"
     }
 
+    // Release signing comes from the environment so CI (GitHub Actions) can inject the keystore
+    // without it ever living in the repo. GameLaunchActivity's signature check means the bridge
+    // only works if this keystore matches the one DGPlayer is signed with — a CI fallback key
+    // produces an installable APK, but bridge launches will be rejected.
+    def releaseKeystorePath = System.getenv('DGW_KEYSTORE_FILE')
+
     signingConfigs {
         debug {
             if (dgpDebugKeystore != null) {
@@ -48,12 +54,32 @@ android {
                 keyPassword 'android'
             }
         }
+        release {
+            if (releaseKeystorePath != null && !releaseKeystorePath.trim().isEmpty()) {
+                storeFile file(releaseKeystorePath.trim())
+                storePassword System.getenv('DGW_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('DGW_KEY_ALIAS')
+                keyPassword System.getenv('DGW_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
         debug {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            ndk {
+                abiFilters 'arm64-v8a'
+            }
+        }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            if (releaseKeystorePath != null && !releaseKeystorePath.trim().isEmpty()) {
+                signingConfig signingConfigs.release
+            }
 
             ndk {
                 abiFilters 'arm64-v8a'
