@@ -25,7 +25,10 @@ import java.util.Locale;
 
 public abstract class GeneralComponents {
     public enum InstallMode {DOWNLOAD, FILE, BOTH}
-    private static final String INSTALLABLE_COMPONENTS_URL = "https://raw.githubusercontent.com/brunodev85/winlator/main/installable_components/%s";
+    // Fork repo, not upstream: components downloaded from brunodev85/winlator embed the unpatched
+    // /data/data/com.winlator ELF interpreter path and fail with ENOENT under com.dgplayer.
+    // The fork's installable_components/*.tzst are binary-patched by scripts/patch_tzst.py.
+    private static final String INSTALLABLE_COMPONENTS_URL = "https://raw.githubusercontent.com/skyksit/DGWinlator/dgplayer/installable_components/%s";
 
     public enum Type {
         BOX64, TURNIP, DXVK, VKD3D, WINED3D, SOUNDFONT, ADRENOTOOLS_DRIVER;

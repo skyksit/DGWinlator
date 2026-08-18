@@ -55,7 +55,8 @@ import java.util.concurrent.Executors;
 public class GameLaunchActivity extends AppCompatActivity {
     private static final String TAG = "DGPlayerBridge";
 
-    public static final String ACTION_PLAY_GAME = "com.winlator.action.PLAY_GAME";
+    // Must stay a literal mirroring AndroidManifest.xml (the manifest cannot reference BuildConfig).
+    public static final String ACTION_PLAY_GAME = "com.dgplayer.action.PLAY_GAME";
 
     public static final String EXTRA_GAME_ID = "game_id";
     public static final String EXTRA_TITLE = "title";

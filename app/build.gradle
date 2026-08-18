@@ -21,17 +21,16 @@ android {
     compileSdk 34
 
     defaultConfig {
-        // Must stay 'com.winlator'. The prebuilt rootfs is not relocatable: every glibc binary in it
-        // (box64, wine, wineserver, ...) has its ELF interpreter hardcoded to
-        // /data/data/com.winlator/files/rootfs/lib/ld-linux-aarch64.so.1, and ld.so.cache plus
-        // several configs embed the same prefix. Under any other applicationId execve() fails with
-        // ENOENT before a single guest process starts. Verified on device, 2026-08-17.
+        // Must stay exactly 12 bytes long, same as upstream's 'com.winlator'. The prebuilt rootfs
+        // is not relocatable: every glibc binary in it (box64, wine, wineserver, ...) has its ELF
+        // interpreter hardcoded to /data/data/<applicationId>/files/rootfs/lib/ld-linux-aarch64.so.1,
+        // and ld.so.cache plus several configs embed the same prefix. All shipped .tzst assets have
+        // been binary-patched com.winlator -> com.dgplayer via scripts/patch_tzst.py (root repo);
+        // the same-length substitution keeps every offset-based structure valid. Any future rename
+        // must rerun that script (and keep the 12-byte length) or regenerate the rootfs.
         //
-        // Consequence: this fork replaces stock Winlator rather than coexisting with it, and a device
-        // that already has the upstream APK must uninstall it first (same package, different signer).
-        // A coexisting build would need an applicationId of exactly the same byte length
-        // (e.g. 'com.dgplayer') plus an install-time pass that rewrites those embedded paths in place.
-        applicationId 'com.winlator'
+        // Consequence: this fork now coexists with stock Winlator instead of replacing it.
+        applicationId 'com.dgplayer'
         minSdkVersion 26
         // Must stay 28. Winlator execve()s proot/box64/wine out of filesDir, which Android 10+
         // (targetSdk 29+) blocks as a W^X violation. This is a functional requirement, not laziness.
