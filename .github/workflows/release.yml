@@ -1,0 +1,84 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install NDK and CMake
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;24.0.8215888" "cmake;3.22.1"
+
+      - name: Prepare signing keystore
+        env:
+          DGW_KEYSTORE_BASE64: ${{ secrets.DGW_KEYSTORE_BASE64 }}
+        run: |
+          KS="$RUNNER_TEMP/dgwinlator.keystore"
+          if [ -n "$DGW_KEYSTORE_BASE64" ]; then
+            printf '%s' "$DGW_KEYSTORE_BASE64" | base64 -d > "$KS"
+            echo "Using keystore from DGW_KEYSTORE_BASE64 secret."
+          else
+            # Fallback: throwaway CI key. The APK installs fine, but the signature changes on
+            # every run (updates need uninstall) and the DGPlayer bridge will reject launches.
+            keytool -genkeypair -v -keystore "$KS" -alias dgwinlator \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=DGWinlator CI, O=DGWinlator"
+            echo "::warning::DGW_KEYSTORE_BASE64 secret is not set. APK is signed with a throwaway CI key - add the DGW_KEYSTORE_* secrets for a stable release signature."
+          fi
+          echo "DGW_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: app
+        env:
+          DGW_KEYSTORE_PASSWORD: ${{ secrets.DGW_KEYSTORE_PASSWORD || 'android' }}
+          DGW_KEY_ALIAS: ${{ secrets.DGW_KEY_ALIAS || 'dgwinlator' }}
+          DGW_KEY_PASSWORD: ${{ secrets.DGW_KEY_PASSWORD || 'android' }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Collect APK
+        run: |
+          APK=$(ls app/app/build/outputs/apk/release/*.apk | head -n 1)
+          OUT="DGWinlator-${GITHUB_REF_NAME}.apk"
+          cp "$APK" "$OUT"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dgwinlator-apk
+          path: ${{ env.APK_PATH }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DGWinlator ${{ github.ref_name }}
+          files: ${{ env.APK_PATH }}
+          generate_release_notes: true
