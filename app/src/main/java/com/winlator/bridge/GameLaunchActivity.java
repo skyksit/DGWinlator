@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -185,6 +186,12 @@ public class GameLaunchActivity extends AppCompatActivity {
 
         File gameDir = new File(container.getRootDir(), ".wine/drive_c/"+GAMES_DIR+"/"+gameId);
         Uri contentUri = getIntent().getParcelableExtra(EXTRA_CONTENT_URI);
+
+        // Before anything can wipe the game dir (reinstall below), rescue the previous session's
+        // log files to public Downloads. Every drive the container maps lives in app-private
+        // storage, so this is the only way logs a guest program wrote (e.g. _inmm.log) can reach
+        // adb or the user at all.
+        exportDebugLogs(gameId, gameDir, new File(AppUtils.INTERNAL_STORAGE));
 
         // A repackaged zip under the same game id must win over the cached install, so the
         // installed check compares the payload's fingerprint, not mere marker existence.
@@ -373,6 +380,38 @@ public class GameLaunchActivity extends AppCompatActivity {
         catch (JSONException e) {
             Log.w(TAG, "bad controls profile "+relativePath, e);
             return 0;
+        }
+    }
+
+    /**
+     * Copies the previous session's {@code *.log} files from the container-visible directories
+     * into public {@code Download/DGWinlator}, where adb and the user can actually reach them.
+     * Guest programs (like the {@code _inmm} audio shim) can only write inside the app-private
+     * drives, so without this hop their diagnostics are unreadable from outside.
+     *
+     * <p>Runs before a possible payload reinstall wipes the game dir. Best-effort by design: a
+     * missing storage permission must never block a launch.
+     */
+    private void exportDebugLogs(String gameId, File... sourceDirs) {
+        try {
+            File exportDir = new File(Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS), "DGWinlator");
+            for (File dir : sourceDirs) {
+                File[] logs = dir.listFiles((d, name) -> name.toLowerCase(Locale.ENGLISH).endsWith(".log"));
+                if (logs == null) continue;
+                for (File log : logs) {
+                    if (!exportDir.isDirectory() && !exportDir.mkdirs()) {
+                        Log.w(TAG, "cannot create log export dir "+exportDir);
+                        return;
+                    }
+                    File target = new File(exportDir, gameId+"-"+log.getName());
+                    if (FileUtils.copy(log, target)) Log.i(TAG, "exported log to "+target);
+                    else Log.w(TAG, "failed to export log "+log);
+                }
+            }
+        }
+        catch (Exception e) {
+            Log.w(TAG, "log export failed", e);
         }
     }
 
