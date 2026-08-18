@@ -51,9 +51,15 @@ abstract class PayloadInstaller {
      */
     static String fingerprint(Context context, Uri contentUri) {
         try (ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(contentUri, "r")) {
-            if (pfd == null) return null;
+            if (pfd == null) {
+                Log.w(TAG, "fingerprint: resolver returned no fd for "+contentUri);
+                return null;
+            }
             long size = pfd.getStatSize();
-            if (size <= 0) return null;
+            if (size <= 0) {
+                Log.w(TAG, "fingerprint: statSize="+size+" for "+contentUri);
+                return null;
+            }
 
             try (FileInputStream inStream = new FileInputStream(pfd.getFileDescriptor())) {
                 FileChannel channel = inStream.getChannel();
@@ -79,11 +85,20 @@ abstract class PayloadInstaller {
      */
     static boolean isInstalled(File destination, String fingerprint) {
         File marker = new File(destination, INSTALLED_MARKER);
-        if (!marker.isFile()) return false;
-        if (fingerprint == null) return true;
+        if (!marker.isFile()) {
+            Log.i(TAG, "isInstalled: no marker, fresh install needed");
+            return false;
+        }
+        if (fingerprint == null) {
+            Log.w(TAG, "isInstalled: payload fingerprint unavailable, keeping current install");
+            return true;
+        }
         // Markers from before fingerprinting are empty; treat as mismatch so the one next launch
         // re-imports and records a comparable identity from then on.
-        return fingerprint.equals(FileUtils.readString(marker).trim());
+        String stored = FileUtils.readString(marker).trim();
+        boolean match = fingerprint.equals(stored);
+        Log.i(TAG, "isInstalled: payload="+fingerprint+" marker="+stored+" match="+match);
+        return match;
     }
 
     /** Extracts the archive behind {@code contentUri} into {@code destination}. */
