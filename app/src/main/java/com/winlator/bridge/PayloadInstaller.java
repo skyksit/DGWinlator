@@ -2,6 +2,7 @@ package com.winlator.bridge;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
 import com.winlator.core.FileUtils;
@@ -9,9 +10,13 @@ import com.winlator.core.StreamUtils;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -27,15 +32,62 @@ import java.util.zip.ZipInputStream;
  */
 abstract class PayloadInstaller {
     private static final String TAG = "DGPlayerBridge";
-    /** Written once a payload has been fully extracted, so relaunches skip the import entirely. */
+    /**
+     * Written once a payload has been fully extracted, so relaunches skip the import. It stores the
+     * payload's {@link #fingerprint} so a repackaged zip under the same game id (same dsam3 file
+     * name) is detected and re-imported instead of silently running the stale install.
+     */
     private static final String INSTALLED_MARKER = ".dgp_installed";
+    /** How much of the zip's tail goes into the fingerprint — covers the central directory. */
+    private static final int FINGERPRINT_TAIL_SIZE = 65536;
 
-    static boolean isInstalled(File destination) {
-        return new File(destination, INSTALLED_MARKER).exists();
+    /**
+     * Cheap identity of the payload archive: its size plus a CRC of its last 64KB. A zip's central
+     * directory lives at the end and changes whenever any entry changes, so this catches a swapped
+     * archive without streaming hundreds of megabytes on every launch.
+     *
+     * @return null when the URI cannot be opened or is not a plain seekable file — callers must
+     *         treat that as "cannot compare", not as a mismatch
+     */
+    static String fingerprint(Context context, Uri contentUri) {
+        try (ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(contentUri, "r")) {
+            if (pfd == null) return null;
+            long size = pfd.getStatSize();
+            if (size <= 0) return null;
+
+            try (FileInputStream inStream = new FileInputStream(pfd.getFileDescriptor())) {
+                FileChannel channel = inStream.getChannel();
+                int tail = (int)Math.min(size, FINGERPRINT_TAIL_SIZE);
+                ByteBuffer buffer = ByteBuffer.allocate(tail);
+                channel.position(size - tail);
+                while (buffer.hasRemaining() && channel.read(buffer) != -1);
+
+                CRC32 crc = new CRC32();
+                crc.update(buffer.array(), 0, buffer.position());
+                return size+":"+Long.toHexString(crc.getValue());
+            }
+        }
+        catch (Exception e) {
+            Log.w(TAG, "could not fingerprint payload "+contentUri, e);
+            return null;
+        }
+    }
+
+    /**
+     * @param fingerprint the current payload's {@link #fingerprint}, or null when unavailable —
+     *                    null keeps whatever is installed (better than re-importing every launch)
+     */
+    static boolean isInstalled(File destination, String fingerprint) {
+        File marker = new File(destination, INSTALLED_MARKER);
+        if (!marker.isFile()) return false;
+        if (fingerprint == null) return true;
+        // Markers from before fingerprinting are empty; treat as mismatch so the one next launch
+        // re-imports and records a comparable identity from then on.
+        return fingerprint.equals(FileUtils.readString(marker).trim());
     }
 
     /** Extracts the archive behind {@code contentUri} into {@code destination}. */
-    static boolean install(Context context, Uri contentUri, File destination) {
+    static boolean install(Context context, Uri contentUri, File destination, String fingerprint) {
         if (!destination.isDirectory() && !destination.mkdirs()) return false;
 
         String destinationPath;
@@ -82,10 +134,10 @@ abstract class PayloadInstaller {
             return false;
         }
 
-        return markInstalled(destination);
+        return markInstalled(destination, fingerprint);
     }
 
-    private static boolean markInstalled(File destination) {
+    private static boolean markInstalled(File destination, String fingerprint) {
         File marker = new File(destination, INSTALLED_MARKER);
         try {
             if (!marker.createNewFile() && !marker.exists()) return false;
@@ -93,6 +145,7 @@ abstract class PayloadInstaller {
         catch (IOException e) {
             return false;
         }
+        if (fingerprint != null) FileUtils.writeString(marker, fingerprint);
         FileUtils.chmod(marker, 0771);
         return true;
     }

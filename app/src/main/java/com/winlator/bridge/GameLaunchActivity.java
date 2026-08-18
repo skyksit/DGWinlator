@@ -186,7 +186,10 @@ public class GameLaunchActivity extends AppCompatActivity {
         File gameDir = new File(container.getRootDir(), ".wine/drive_c/"+GAMES_DIR+"/"+gameId);
         Uri contentUri = getIntent().getParcelableExtra(EXTRA_CONTENT_URI);
 
-        if (!PayloadInstaller.isInstalled(gameDir)) {
+        // A repackaged zip under the same game id must win over the cached install, so the
+        // installed check compares the payload's fingerprint, not mere marker existence.
+        String fingerprint = contentUri != null ? PayloadInstaller.fingerprint(this, contentUri) : null;
+        if (!PayloadInstaller.isInstalled(gameDir, fingerprint)) {
             if (contentUri == null) {
                 finishWithErrorOnUiThread("Game not installed and no content_uri supplied");
                 return;
@@ -194,8 +197,10 @@ public class GameLaunchActivity extends AppCompatActivity {
 
             preloaderDialog.showOnUiThread(R.string.dgp_installing_game);
             // A half-extracted directory would look installed on the next run; start from scratch.
+            // This also wipes the previous payload's files (including anything it saved in its own
+            // folder) — required, or the old and new game's files would merge unpredictably.
             PayloadInstaller.deleteRecursively(gameDir);
-            if (!PayloadInstaller.install(this, contentUri, gameDir)) {
+            if (!PayloadInstaller.install(this, contentUri, gameDir, fingerprint)) {
                 PayloadInstaller.deleteRecursively(gameDir);
                 finishWithErrorOnUiThread("Failed to import game payload");
                 return;
