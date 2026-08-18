@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -144,11 +145,30 @@ public class GameLaunchActivity extends AppCompatActivity {
      * {@code adb shell am start} looks like), which is only tolerated in debug builds so the intent
      * contract stays testable from a shell.
      */
+    /**
+     * SHA-256 of the shared DGPlayer dev certificate (dsam3/debug.keystore). Debug DGPlayer builds
+     * are signed with it while this APK's release builds carry the skyksit release key, so a plain
+     * checkSignatures() would lock debug DGPlayer out of release DGWinlator. Pinning exactly this
+     * one certificate keeps the dev loop working without opening the bridge to arbitrary callers.
+     */
+    private static final byte[] DGP_DEBUG_CERT_SHA256 = {
+            (byte) 0xE6, (byte) 0x5F, (byte) 0x40, (byte) 0x32, (byte) 0xB0, (byte) 0x09, (byte) 0xDD, (byte) 0xB3,
+            (byte) 0x7E, (byte) 0xB5, (byte) 0x2F, (byte) 0xA3, (byte) 0xD0, (byte) 0xF8, (byte) 0x84, (byte) 0xCF,
+            (byte) 0x21, (byte) 0x37, (byte) 0xCD, (byte) 0x23, (byte) 0xAD, (byte) 0x43, (byte) 0xA6, (byte) 0xEF,
+            (byte) 0x08, (byte) 0x05, (byte) 0x85, (byte) 0x8B, (byte) 0x68, (byte) 0x1F, (byte) 0xBF, (byte) 0x9D
+    };
+
     private boolean isCallerTrusted() {
         String callingPackage = getCallingPackage();
         if (callingPackage == null) return BuildConfig.DEBUG;
-        return getPackageManager().checkSignatures(getPackageName(), callingPackage)
-                == PackageManager.SIGNATURE_MATCH;
+        if (getPackageManager().checkSignatures(getPackageName(), callingPackage)
+                == PackageManager.SIGNATURE_MATCH) {
+            return true;
+        }
+        // hasSigningCertificate() exists only from API 28; below that, same-signature is the only path.
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                && getPackageManager().hasSigningCertificate(
+                        callingPackage, DGP_DEBUG_CERT_SHA256, PackageManager.CERT_INPUT_SHA256);
     }
 
     private void prepareAndLaunch(String gameId) {
