@@ -6,7 +6,7 @@
 
 DGWinlator is a fork of [Winlator](https://github.com/brunodev85/winlator) — an Android application that lets you run Windows (x86_64) applications with Wine and Box86/Box64 — extended with a **DGPlayer bridge** so that the DGPlayer app can launch Windows games directly inside this container runtime.
 
-The fork installs as **`com.dgplayer`** and therefore **coexists with stock Winlator**. The applicationId is deliberately the same byte length (12) as `com.winlator`: the prebuilt rootfs embeds `/data/data/<applicationId>/...` absolute paths (including the glibc ELF interpreter), and every shipped `.tzst` asset — rootfs, box64, graphics drivers, and the runtime-downloadable `installable_components` — has been binary-patched in place by [`scripts/patch_tzst.py`](scripts/patch_tzst.py). Any future rename must keep the 12-byte length and rerun that script.
+The fork installs as **`com.retrople`** and therefore **coexists with stock Winlator**. The applicationId is deliberately the same byte length (12) as `com.winlator`: the prebuilt rootfs embeds `/data/data/<applicationId>/...` absolute paths (including the glibc ELF interpreter), and every shipped `.tzst` asset — rootfs, box64, graphics drivers, and the runtime-downloadable `installable_components` — has been binary-patched in place by [`scripts/patch_tzst.py`](scripts/patch_tzst.py). Any future rename must keep the 12-byte length and rerun that script.
 
 ## What's different from upstream Winlator
 
@@ -22,14 +22,14 @@ Upstream Winlator has no external launch surface: `XServerDisplayActivity` is no
 ### Launch intent
 
 ```
-action:     com.dgplayer.action.PLAY_GAME
-component:  com.dgplayer/com.winlator.bridge.GameLaunchActivity
+action:     com.retrople.action.PLAY_GAME
+component:  com.retrople/com.winlator.bridge.GameLaunchActivity
 extras:     game_id, title, content_uri, exe, exe_args, screen_size,
             graphics_driver, dxwrapper, dxwrapper_config, box64_preset,
             env_vars, force_fullscreen
 ```
 
-The Java source package stays `com.winlator.*` (JNI symbol names and the R/BuildConfig namespace depend on it); only the applicationId, intent action, and permission carry the `com.dgplayer` identity.
+The Java source package stays `com.winlator.*` (JNI symbol names and the R/BuildConfig namespace depend on it); only the applicationId, intent action, and permission carry the `com.retrople` identity.
 
 ## Repository layout
 
@@ -41,7 +41,7 @@ This repository uses git submodules:
 | `vortek` | [Vortek](https://github.com/brunodev85/vortek) graphics driver |
 | `gladio` | [Gladio](https://github.com/brunodev85/gladio) |
 
-The `vortek` and `gladio` submodules are upstream repositories and are left untouched: the guest-side driver binaries shipped in `app/app/src/main/assets/graphics_driver/*.tzst` are already binary-patched for `com.dgplayer`. If you ever rebuild those drivers from source, edit their `include/winlator.h` / `include/vortek.h` / `include/gladio.h` path defines (and `build.sh`) to the `com.dgplayer` prefix first — the in-tree copies under `app/app/src/main/cpp/**` already carry it.
+The `vortek` and `gladio` submodules are upstream repositories and are left untouched: the guest-side driver binaries shipped in `app/app/src/main/assets/graphics_driver/*.tzst` are already binary-patched for `com.retrople`. If you ever rebuild those drivers from source, edit their `include/winlator.h` / `include/vortek.h` / `include/gladio.h` path defines (and `build.sh`) to the `com.retrople` prefix first — the in-tree copies under `app/app/src/main/cpp/**` already carry it.
 
 `scripts/` holds the fork tooling: `patch_tzst.py` (asset path rebranding with built-in verification) and `gen_branding.py` (logo and launcher icon generation).
 

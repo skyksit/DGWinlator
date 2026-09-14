@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebrand .tzst assets in place: com.winlator -> com.dgplayer (same byte length).
+"""Rebrand .tzst assets in place: OLD -> NEW applicationId (same byte length).
 
 The rootfs and driver archives embed /data/data/com.winlator/... absolute paths
 (ELF PT_INTERP, ld.so.cache, locale-archive, configs, one absolute symlink
@@ -10,6 +10,13 @@ The tar stream is rewritten member-by-member with tarfile so that symlink
 linkname fields get patched with a correct header checksum, and so that no
 symlink is ever materialized on NTFS. Compression is standard zstd frames
 (level 19) readable by the on-device zstd-jni decoder.
+
+Renaming the app means re-running this with OLD set to whatever the assets
+currently carry. The 12-byte length is a hard requirement, not a convention:
+PT_INTERP and the ELF string tables have no slack, so a longer name would need
+every native component rebuilt from source.
+
+  com.winlator (upstream) -> com.dgplayer (2026-08) -> com.retrople (2026-09)
 
 For each archive the script:
   1. counts occurrences in the fully decompressed original stream (baseline)
@@ -27,10 +34,10 @@ import tarfile
 
 import zstandard
 
-OLD = b"com.winlator"
-NEW = b"com.dgplayer"
-OLD16 = "com.winlator".encode("utf-16-le")
-NEW16 = "com.dgplayer".encode("utf-16-le")
+OLD = b"com.dgplayer"
+NEW = b"com.retrople"
+OLD16 = "com.dgplayer".encode("utf-16-le")
+NEW16 = "com.retrople".encode("utf-16-le")
 assert len(OLD) == len(NEW) == 12
 assert len(OLD16) == len(NEW16) == 24
 
