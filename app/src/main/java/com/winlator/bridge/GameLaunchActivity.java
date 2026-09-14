@@ -62,7 +62,7 @@ public class GameLaunchActivity extends AppCompatActivity {
     private static final String TAG = "DGPlayerBridge";
 
     // Must stay a literal mirroring AndroidManifest.xml (the manifest cannot reference BuildConfig).
-    public static final String ACTION_PLAY_GAME = "com.dgplayer.action.PLAY_GAME";
+    public static final String ACTION_PLAY_GAME = "com.retrople.action.PLAY_GAME";
 
     public static final String EXTRA_GAME_ID = "game_id";
     public static final String EXTRA_TITLE = "title";
@@ -76,6 +76,11 @@ public class GameLaunchActivity extends AppCompatActivity {
     public static final String EXTRA_BOX64_PRESET = "box64_preset";
     public static final String EXTRA_ENV_VARS = "env_vars";
     public static final String EXTRA_FORCE_FULLSCREEN = "force_fullscreen";
+    /**
+     * Content URI of DGPlayer's per-game save archive, granted read + write. Optional: without it
+     * the game still runs, it just keeps its in-game saves to itself. See {@link SaveSync}.
+     */
+    public static final String EXTRA_SAVE_URI = SaveSync.EXTRA_SAVE_URI;
 
     /** Directory inside the container's C: drive that holds every game imported from DGPlayer. */
     public static final String GAMES_DIR = "DGPlayer";
@@ -186,6 +191,14 @@ public class GameLaunchActivity extends AppCompatActivity {
 
         File gameDir = new File(container.getRootDir(), ".wine/drive_c/"+GAMES_DIR+"/"+gameId);
         Uri contentUri = getIntent().getParcelableExtra(EXTRA_CONTENT_URI);
+        Uri saveUri = getIntent().getParcelableExtra(EXTRA_SAVE_URI);
+
+        // A session that never reached exit() (crash, force-stop, battery) never exported its
+        // saves. Catch up here, while the previous payload and its dgplayer.ini are both still in
+        // place -- the reinstall below would take the in-folder saves with them.
+        if (saveUri != null && SaveSync.hasPendingExport(this, gameId)) {
+            SaveSync.exportOnExit(this, container, gameId, saveUri);
+        }
 
         // Before anything can wipe the game dir (reinstall below), rescue the previous session's
         // log files to public Downloads. Every drive the container maps lives in app-private
@@ -196,6 +209,7 @@ public class GameLaunchActivity extends AppCompatActivity {
         // A repackaged zip under the same game id must win over the cached install, so the
         // installed check compares the payload's fingerprint, not mere marker existence.
         String fingerprint = contentUri != null ? PayloadInstaller.fingerprint(this, contentUri) : null;
+        boolean payloadReinstalled = false;
         if (!PayloadInstaller.isInstalled(gameDir, fingerprint)) {
             if (contentUri == null) {
                 finishWithErrorOnUiThread("Game not installed and no content_uri supplied");
@@ -212,6 +226,10 @@ public class GameLaunchActivity extends AppCompatActivity {
                 finishWithErrorOnUiThread("Failed to import game payload");
                 return;
             }
+            payloadReinstalled = true;
+            // The folder now holds exactly the package, which is the only moment its contents can
+            // be told apart from the saves a game writes into it later.
+            SaveSync.onPayloadInstalled(this, container, gameId);
         }
 
         // Settings ship inside the archive; anything the caller sent explicitly overrides them.
@@ -231,6 +249,14 @@ public class GameLaunchActivity extends AppCompatActivity {
 
         applyPreset(container, manifest, gameDir);
         applyCopies(container, manifest, gameDir);
+
+        // After the payload (a reinstall would delete what we restore) and after applyPreset, whose
+        // drives string is what resolves D: for the manifest copy targets. The executable check
+        // above stays ahead of this on purpose: a game binary must come from the package, never
+        // from a save archive.
+        if (saveUri != null) {
+            SaveSync.restoreIfNeeded(this, container, gameId, saveUri, manifest, payloadReinstalled);
+        }
 
         // Everything below edits the prefix's registry hives as plain files, so it has to happen
         // while Wine is stopped — i.e. before XServerDisplayActivity starts.
@@ -254,11 +280,18 @@ public class GameLaunchActivity extends AppCompatActivity {
                 ? getIntent().getBooleanExtra(EXTRA_FORCE_FULLSCREEN, false)
                 : manifest.getBoolean("forceFullscreen");
 
+        // As late as possible, so every file the bridge itself just wrote counts as pre-existing.
+        if (saveUri != null) SaveSync.beginSession(this, container, gameId, manifest);
+
         Intent intent = new Intent(this, XServerDisplayActivity.class);
         intent.putExtra("container_id", container.id);
         intent.putExtra("exec_path", execPath);
         // Tells XServerDisplayActivity.exit() to finish instead of restarting into MainActivity.
         intent.putExtra("from_bridge", true);
+        // XServerDisplayActivity.exit() is where a session ends, so that is where saves are
+        // exported. It needs the sanitized id (not DGPlayer's file name) to find the state file.
+        intent.putExtra(SaveSync.EXTRA_GAME_ID, gameId);
+        if (saveUri != null) intent.putExtra(EXTRA_SAVE_URI, saveUri);
         if (controlsProfileId > 0) intent.putExtra("controls_profile", controlsProfileId);
         intent.putExtra("force_fullscreen", forceFullscreen);
         if (cdDiscs != null) {

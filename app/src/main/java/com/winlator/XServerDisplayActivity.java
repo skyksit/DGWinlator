@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -27,6 +28,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.navigation.NavigationView;
 import com.winlator.alsaserver.ALSAClient;
+import com.winlator.bridge.SaveSync;
 import com.winlator.container.AudioDrivers;
 import com.winlator.container.Container;
 import com.winlator.container.ContainerManager;
@@ -100,6 +102,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
     private XServerView xServerView;
@@ -108,6 +111,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private XEnvironment environment;
     private DrawerLayout drawerLayout;
     private Container container;
+    /**
+     * Guards exit(): the drawer path stops the guest, whose waitFor thread then calls exit()
+     * again through the termination callback. Harmless while exit() only finished the activity,
+     * but the save export below must not run twice.
+     */
+    private final AtomicBoolean exiting = new AtomicBoolean(false);
     private XServer xServer;
     private InputControlsManager inputControlsManager;
     private RootFS rootFS;
@@ -426,16 +435,31 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     }
 
     private void exit() {
+        // Set before stopping the guest, because stopping it re-enters exit() from the waitFor thread.
+        if (!exiting.compareAndSet(false, true)) return;
+
         winHandler.stop();
         if (environment != null) environment.stopEnvironmentComponents();
 
-        Intent intent = getIntent();
+        final Intent intent = getIntent();
         // Launched by DGPlayer: just end this task so the caller's app comes back to the foreground.
         // Restarting into MainActivity would strand the user in Winlator's container list instead of
         // returning them to the game library they pressed Play from.
         if (intent.getBooleanExtra("from_bridge", false)) {
-            setResult(RESULT_OK);
-            finish();
+            Runnable work = () -> {
+                // Ahead of finish(), so Android cannot reclaim the process mid-export once the task
+                // is gone. exportOnExit never throws and no-ops when the caller sent no save_uri.
+                SaveSync.exportOnExit(this, container, intent.getStringExtra(SaveSync.EXTRA_GAME_ID),
+                        intent.getParcelableExtra(SaveSync.EXTRA_SAVE_URI));
+                runOnUiThread(() -> {
+                    setResult(RESULT_OK);
+                    finish();
+                });
+            };
+            // File I/O, so never on the UI thread. The guest termination path already runs on the
+            // waitFor executor and can do the work inline.
+            if (Looper.myLooper() == Looper.getMainLooper()) Executors.newSingleThreadExecutor().execute(work);
+            else work.run();
             return;
         }
 
