@@ -40,7 +40,9 @@ abstract class SaveSnapshot {
      * would make every session look "changed".
      */
     private static final String[] EXCLUDED_SUFFIXES = {
-        ".log", ".dxvk-cache", ".vkd3d-cache", ".tmp", ".dmp"
+        ".log", ".dxvk-cache", ".vkd3d-cache", ".tmp", ".dmp",
+        // Start Menu entries Wine generates when it boots a prefix for the first time.
+        ".lnk"
     };
     private static final Set<String> EXCLUDED_NAMES = new HashSet<>(Arrays.asList(
         ".dgp_installed", ".windows-label", ".windows-serial",
@@ -50,6 +52,14 @@ abstract class SaveSnapshot {
     private static final Set<String> EXCLUDED_WINDOWS_NAMES = new HashSet<>(Arrays.asList(
         "win.ini", "system.ini"
     ));
+    /**
+     * Extensions never written as a save into {@code C:\windows}. Wine and Winlator drop their own
+     * binaries there - wfm.exe, winhandler.exe, libcdio.dll - and on a fresh prefix that happens
+     * during the first session, i.e. after the baseline was taken. What a game legitimately leaves
+     * in the Windows directory is an .ini or .cfg, so filtering by extension keeps that working
+     * while refusing to carry emulator internals between devices.
+     */
+    private static final String[] EXCLUDED_WINDOWS_SUFFIXES = {".exe", ".dll"};
 
     enum Scope { GAME_DIR, SHARED, ALL }
 
@@ -84,6 +94,8 @@ abstract class SaveSnapshot {
         roots.excludedPrefixes.add(USERS_XUSER + "Temp/");
         roots.excludedPrefixes.add(USERS_XUSER + "AppData/Local/Microsoft/Windows/INetCache/");
         roots.excludedPrefixes.add(USERS_XUSER + "AppData/Roaming/Microsoft/Windows/Start Menu/");
+        // Container.getStartMenuDir(): Wine writes a shortcut per bundled tool on first boot.
+        roots.excludedPrefixes.add(PROGRAM_DATA + "/Microsoft/Windows/Start Menu/");
         roots.excludedPrefixes.add(USERS_XUSER + "AppData/Roaming/Microsoft/Windows/Recent/");
 
         // copy= targets are rewritten from the package on every launch (GameLaunchActivity
@@ -158,9 +170,11 @@ abstract class SaveSnapshot {
         for (String suffix : EXCLUDED_SUFFIXES) {
             if (name.endsWith(suffix)) return true;
         }
-        if (rel.startsWith(WINDOWS + "/") && rel.indexOf('/', WINDOWS.length() + 1) == -1
-                && EXCLUDED_WINDOWS_NAMES.contains(name)) {
-            return true;
+        if (rel.startsWith(WINDOWS + "/") && rel.indexOf('/', WINDOWS.length() + 1) == -1) {
+            if (EXCLUDED_WINDOWS_NAMES.contains(name)) return true;
+            for (String suffix : EXCLUDED_WINDOWS_SUFFIXES) {
+                if (name.endsWith(suffix)) return true;
+            }
         }
         return false;
     }

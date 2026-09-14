@@ -172,12 +172,16 @@ abstract class SaveArchive {
      *
      * @param gameDirOnly restore only the game folder, used when the payload was just re-imported
      *                    and wiped it while the rest of the container survived
+     * @param onlyMissing  write only files that are absent from the container. Used when the archive
+     *                     was already applied here: the container's copies are then at least as new,
+     *                     so they must not be overwritten, but a gap means the file was lost and the
+     *                     archive is the only copy left
      * @param restored    receives the stat of each file written, so the caller can record it without
      *                    a second walk
      * @return the number of files written
      */
     static int extract(Archive archive, SaveSnapshot.Roots roots, boolean gameDirOnly,
-                       Map<String, long[]> restored) {
+                       boolean onlyMissing, Map<String, long[]> restored) {
         int written = 0;
         try (ZipFile zip = new ZipFile(archive.file)) {
             java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
@@ -193,6 +197,7 @@ abstract class SaveArchive {
                 }
 
                 File file = new File(roots.driveC, name);
+                if (onlyMissing && file.exists()) continue;
                 // Zip slip, the same guard PayloadInstaller uses.
                 if (!file.getCanonicalPath().startsWith(roots.driveC.getCanonicalPath() + File.separator)) {
                     Log.w(TAG, "rejecting escaping save entry " + name);

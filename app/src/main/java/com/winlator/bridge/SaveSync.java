@@ -10,6 +10,7 @@ import com.winlator.container.Container;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -107,8 +108,9 @@ public abstract class SaveSync {
      *       restore, a manual import, a reinstalled app, a recreated container</li>
      *   <li>same stamp but the payload was just re-imported — restore the game folder only; the
      *       shared roots were never wiped and this device's copies of them are at least as new</li>
-     *   <li>same stamp, no re-import — nothing to do; a previous session already wrote this archive,
-     *       or crashed before it could, and the container copy is the newer one either way</li>
+     *   <li>same stamp, no re-import — fill in only what is missing. The container's copies are at
+     *       least as new so they are left alone, but a file that is simply gone (the container was
+     *       cleared, a save was deleted) has the archive as its last copy</li>
      * </ul>
      *
      * @return true when files were written into the container
@@ -130,15 +132,18 @@ public abstract class SaveSync {
 
             try {
                 boolean sameStamp = archive.stamp.equals(state.lastStamp);
-                if (sameStamp && !payloadReinstalled) {
+                boolean gameDirOnly = sameStamp && payloadReinstalled;
+                boolean onlyMissing = sameStamp && !payloadReinstalled;
+
+                Map<String, long[]> restored = new LinkedHashMap<>();
+                int written = SaveArchive.extract(archive, roots, gameDirOnly, onlyMissing, restored);
+
+                String mode = gameDirOnly ? "gameDirOnly" : (onlyMissing ? "missingOnly" : "full");
+                if (written == 0) {
                     Log.i(TAG, "save restore gameId=" + gameId + " stamp=" + archive.stamp
-                            + " -> skip (already applied)");
+                            + " -> nothing to do (" + mode + ")");
                     return false;
                 }
-
-                boolean gameDirOnly = sameStamp;
-                Map<String, long[]> restored = new LinkedHashMap<>();
-                int written = SaveArchive.extract(archive, roots, gameDirOnly, restored);
 
                 state.tracked.putAll(restored);
                 // Only extend an existing baseline. A null one means the game folder has never been
@@ -157,10 +162,9 @@ public abstract class SaveSync {
 
                 Log.i(TAG, String.format(Locale.ENGLISH,
                         "save restore gameId=%s zipStamp=%s reinstalled=%b -> %s entries=%d ms=%d",
-                        gameId, archive.stamp, payloadReinstalled,
-                        gameDirOnly ? "gameDirOnly" : "full", written,
+                        gameId, archive.stamp, payloadReinstalled, mode, written,
                         SystemClock.elapsedRealtime() - started));
-                return written > 0;
+                return true;
             }
             finally {
                 archive.close();
@@ -221,6 +225,18 @@ public abstract class SaveSync {
                 GameManifest.read(gameDirOf(container, gameId)));
 
         Map<String, long[]> current = SaveSnapshot.snapshot(roots, SaveSnapshot.Scope.ALL);
+
+        // Re-filter what is already tracked. Without this a path that a past build wrongly picked
+        // up would be exported for the rest of the game's life, since tracking is cumulative and
+        // never re-examined - widening the exclusion list has to clean up after itself.
+        int untracked = 0;
+        for (Iterator<String> it = state.tracked.keySet().iterator(); it.hasNext(); ) {
+            if (SaveSnapshot.isExcluded(roots, it.next())) {
+                it.remove();
+                untracked++;
+            }
+        }
+        if (untracked > 0) Log.i(TAG, "save export dropped " + untracked + " newly excluded path(s)");
 
         boolean gameDirBaselineKnown = state.gameDirBaseline != null;
         Map<String, long[]> baseline = new LinkedHashMap<>();
@@ -298,8 +314,9 @@ public abstract class SaveSync {
         state.save(context);
 
         Log.i(TAG, String.format(Locale.ENGLISH,
-                "save export gameId=%s stamp=%s files=%d bytes=%d new=%d changed=%d missing=%d ms=%d",
-                gameId, stamp, existing, bytes[0], added, changed.size(), missing,
+                "save export gameId=%s stamp=%s files=%d bytes=%d new=%d changed=%d missing=%d "
+                        + "dropped=%d ms=%d",
+                gameId, stamp, existing, bytes[0], added, changed.size(), missing, untracked,
                 SystemClock.elapsedRealtime() - started));
     }
 
