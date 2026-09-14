@@ -36,7 +36,7 @@ android {
         // Must stay 28. Winlator execve()s proot/box64/wine out of filesDir, which Android 10+
         // (targetSdk 29+) blocks as a W^X violation. This is a functional requirement, not laziness.
         targetSdkVersion 28
-        versionCode 28
+        versionCode 29
         versionName "11.1"
     }
 

@@ -63,6 +63,7 @@ import com.winlator.core.WineRegistryEditor;
 import com.winlator.core.WineStartMenuCreator;
 import com.winlator.core.WineThemeManager;
 import com.winlator.core.WineUtils;
+import com.winlator.inputcontrols.Binding;
 import com.winlator.inputcontrols.ControlsProfile;
 import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
@@ -434,6 +435,25 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         return preferences;
     }
 
+    private void handleControlsCommand(Binding binding) {
+        if (binding == Binding.KEY_DGP_KEYBOARD) {
+            // Already a toggle (InputMethodManager.toggleSoftInput).
+            AppUtils.showKeyboard(this);
+        }
+        else if (binding == Binding.KEY_DGP_MENU) {
+            // Opens the drawer, or closes it when it is already open.
+            onBackPressed();
+        }
+        else if (binding == Binding.KEY_DGP_EDIT_CONTROLS) {
+            ControlsProfile profile = inputControlsView.getProfile();
+            if (profile != null) {
+                Intent intent = new Intent(this, ControlsEditorActivity.class);
+                intent.putExtra("profile_id", profile.id);
+                startActivity(intent);
+            }
+        }
+    }
+
     private void exit() {
         // Set before stopping the guest, because stopping it re-enters exit() from the waitFor thread.
         if (!exiting.compareAndSet(false, true)) return;
@@ -641,6 +661,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         inputControlsView.setOverlayOpacity(preferences.getFloat("overlay_opacity", InputControlsView.DEFAULT_OVERLAY_OPACITY));
         inputControlsView.setTouchpadView(touchpadView);
         inputControlsView.setXServer(xServer);
+        // DGPlayer layouts can carry buttons for app-side actions. The widget stays activity-agnostic
+        // (ControlsEditorActivity builds one too), so the wiring lives here.
+        inputControlsView.setCommandHandler(this::handleControlsCommand);
         inputControlsView.setVisibility(View.GONE);
         rootView.addView(inputControlsView);
 

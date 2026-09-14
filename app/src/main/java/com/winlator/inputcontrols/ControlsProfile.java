@@ -1,6 +1,7 @@
 package com.winlator.inputcontrols;
 
 import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -235,6 +236,12 @@ public class ControlsProfile implements Comparable<ControlsProfile>, GamepadSlot
             for (int i = 0; i < elementsJSONArray.length(); i++) {
                 JSONObject elementJSONObject = elementsJSONArray.getJSONObject(i);
 
+                // One bad element must not take the whole profile down. Enum lookups here
+                // (type/shape/range and every Binding name) throw IllegalArgumentException, which the
+                // outer catch does not handle - and loadElements runs from onDraw, so an .icp written
+                // by a newer DGPlayer than this build would kill the render pass instead of simply
+                // losing the button it does not understand.
+                try {
                 ControlElement element = null;
                 if (inputControlsView != null) {
                     element = new ControlElement(inputControlsView);
@@ -256,12 +263,16 @@ public class ControlsProfile implements Comparable<ControlsProfile>, GamepadSlot
                 JSONArray bindingsJSONArray = elementJSONObject.getJSONArray("bindings");
                 for (int j = 0; j < bindingsJSONArray.length(); j++) {
                     Binding binding = Binding.fromString(bindingsJSONArray.getString(j));
-                    if (element != null) element.setBindingAt(j, Binding.fromString(bindingsJSONArray.getString(j)));
+                    if (element != null) element.setBindingAt(j, binding);
                     if (!binding.isGamepad()) hasGamepadBinding = false;
                 }
 
                 if (!virtualGamepad && hasGamepadBinding) virtualGamepad = true;
                 if (element != null) elements.add(element);
+                }
+                catch (JSONException | IllegalArgumentException e) {
+                    Log.w("DGPlayerBridge", "skipping unreadable control element "+i+": "+e);
+                }
             }
             elementsLoaded = true;
         }

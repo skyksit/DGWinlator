@@ -53,6 +53,7 @@ public class InputControlsView extends View {
     private float offsetY;
     private ControlElement selectedElement;
     private ControlsProfile profile;
+    private CommandHandler commandHandler;
     private float overlayOpacity = DEFAULT_OVERLAY_OPACITY;
     private TouchpadView touchpadView;
     private XServer xServer;
@@ -485,7 +486,7 @@ public class InputControlsView extends View {
                 mouseMoveOffset.y = isActionDown ? (offset != 0 ? offset : (binding == Binding.MOUSE_MOVE_UP ? -1 : 1)) : 0;
                 if (isActionDown) createMouseMoveTimer();
             }
-            else if (binding.keycode.id >= XKeycode.KEY_CUSTOM_1.id) {
+            else if (binding.isCommand()) {
                 if (!isActionDown) handleCommandKeyEvent(binding);
             }
             else {
@@ -525,6 +526,29 @@ public class InputControlsView extends View {
                 audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_PLAY_SOUND);
             }
             else audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_PLAY_SOUND);
+            return;
         }
+
+        if (binding == Binding.KEY_DGP_RELATIVE_MOUSE) {
+            // No plumbing needed: the view already holds the server.
+            if (xServer != null) xServer.setRelativeMouseMovement(!xServer.isRelativeMouseMovement());
+            return;
+        }
+
+        // The rest need the hosting activity, which this widget deliberately does not know about -
+        // ControlsEditorActivity builds one of these too, and there the commands must do nothing.
+        if (commandHandler != null) commandHandler.onCommand(binding);
+    }
+
+    /**
+     * Lets DGPlayer layouts carry buttons for things that live in the app rather than in the guest:
+     * the soft keyboard, the side menu, the controls editor. Installed by XServerDisplayActivity.
+     */
+    public interface CommandHandler {
+        void onCommand(Binding binding);
+    }
+
+    public void setCommandHandler(CommandHandler commandHandler) {
+        this.commandHandler = commandHandler;
     }
 }
