@@ -63,6 +63,24 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Lends ControlsEditorActivity to DGPlayer. That activity stays exported="false" - only this
+            bridge may reach it, and only from a caller that passes BridgeSecurity.isCallerTrusted.
+            sensorLandscape matches both ControlsEditorActivity and XServerDisplayActivity so the
+            layout is authored in exactly the orientation the game will run in.
+        -->
+        <activity android:name="com.winlator.bridge.ControlsEditActivity"
+            android:exported="true"
+            android:theme="@style/AppThemeDark"
+            android:excludeFromRecents="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation">
+            <intent-filter>
+                <action android:name="com.retrople.action.EDIT_CONTROLS"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+
         <activity android:name="com.winlator.ControlsEditorActivity"
             android:exported="false"
             android:theme="@style/AppThemeFullscreenDark"

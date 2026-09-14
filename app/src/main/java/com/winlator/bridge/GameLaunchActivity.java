@@ -4,9 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -17,7 +15,6 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.winlator.BuildConfig;
 import com.winlator.MainActivity;
 import com.winlator.R;
 import com.winlator.XServerDisplayActivity;
@@ -29,8 +26,6 @@ import com.winlator.core.AppUtils;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.GPUHelper;
-import com.winlator.inputcontrols.ControlsProfile;
-import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.core.PreloaderDialog;
 import com.winlator.core.WineUtils;
 import com.winlator.xenvironment.RootFS;
@@ -155,36 +150,9 @@ public class GameLaunchActivity extends AppCompatActivity {
         return result.replace("_", "").isEmpty() ? null : result;
     }
 
-    /**
-     * Rejects callers that are not signed with our certificate. A null calling package means the
-     * caller used {@code startActivity} rather than {@code startActivityForResult} (this is also what
-     * {@code adb shell am start} looks like), which is only tolerated in debug builds so the intent
-     * contract stays testable from a shell.
-     */
-    /**
-     * SHA-256 of the shared DGPlayer dev certificate (dsam3/debug.keystore). Debug DGPlayer builds
-     * are signed with it while this APK's release builds carry the skyksit release key, so a plain
-     * checkSignatures() would lock debug DGPlayer out of release DGWinlator. Pinning exactly this
-     * one certificate keeps the dev loop working without opening the bridge to arbitrary callers.
-     */
-    private static final byte[] DGP_DEBUG_CERT_SHA256 = {
-            (byte) 0xE6, (byte) 0x5F, (byte) 0x40, (byte) 0x32, (byte) 0xB0, (byte) 0x09, (byte) 0xDD, (byte) 0xB3,
-            (byte) 0x7E, (byte) 0xB5, (byte) 0x2F, (byte) 0xA3, (byte) 0xD0, (byte) 0xF8, (byte) 0x84, (byte) 0xCF,
-            (byte) 0x21, (byte) 0x37, (byte) 0xCD, (byte) 0x23, (byte) 0xAD, (byte) 0x43, (byte) 0xA6, (byte) 0xEF,
-            (byte) 0x08, (byte) 0x05, (byte) 0x85, (byte) 0x8B, (byte) 0x68, (byte) 0x1F, (byte) 0xBF, (byte) 0x9D
-    };
-
+    /** Rejects callers that are not signed with our certificate — see {@link BridgeSecurity}. */
     private boolean isCallerTrusted() {
-        String callingPackage = getCallingPackage();
-        if (callingPackage == null) return BuildConfig.DEBUG;
-        if (getPackageManager().checkSignatures(getPackageName(), callingPackage)
-                == PackageManager.SIGNATURE_MATCH) {
-            return true;
-        }
-        // hasSigningCertificate() exists only from API 28; below that, same-signature is the only path.
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                && getPackageManager().hasSigningCertificate(
-                        callingPackage, DGP_DEBUG_CERT_SHA256, PackageManager.CERT_INPUT_SHA256);
+        return BridgeSecurity.isCallerTrusted(this);
     }
 
     private void prepareAndLaunch(String gameId) {
@@ -379,15 +347,17 @@ public class GameLaunchActivity extends AppCompatActivity {
     }
 
     /**
-     * Imports the on-screen controls profile (.icp) a package ships via the {@code controlsProfile}
-     * manifest key, and returns its profile id (0 if none).
+     * Resolves the on-screen controls profile (.icp) for this launch and returns its profile id
+     * (0 if there is none).
      *
-     * <p>dsam3's own VPAD overlay cannot reach a game running in this app, so touch controls have to
-     * come from Winlator's InputControls system instead — this is the hook that lets a game package
-     * carry its own layout. The profile is deduplicated by name: importing on every launch would
-     * otherwise pile up copies (and {@code InputControlsManager.importProfile} assigns a fresh id
-     * each call), so an existing profile with the same name is reused as-is. That also means a user's
-     * in-game edits to the profile survive relaunches.
+     * <p>DGPlayer's own VPAD overlay cannot reach a game running in this app, so touch controls have
+     * to come from Winlator's InputControls system instead. Two sources feed it: the layout DGPlayer
+     * generates from the game's pad (sent as {@link #EXTRA_CONTROLS_PROFILE}) and, as a fallback, an
+     * .icp the package itself ships via the {@code controlsProfile} manifest key. The generated one
+     * wins — the player edits it there, so a stale file inside the archive must not shadow it.
+     *
+     * <p>Storage is {@link BridgeControlsProfiles#upsert}'s job: matched by name, overwritten in
+     * place, id preserved.
      */
     private int importControlsProfile(GameManifest manifest, File gameDir) {
         // DGPlayer's generated layout wins over whatever the package ships: the player edits it
@@ -409,36 +379,7 @@ public class GameLaunchActivity extends AppCompatActivity {
         }
 
         try {
-            JSONObject data = new JSONObject(json);
-            String name = data.getString("name");
-
-            InputControlsManager manager = new InputControlsManager(this);
-            for (ControlsProfile profile : manager.getProfiles()) {
-                if (!profile.getName().equals(name)) continue;
-
-                // Reusing the existing profile unchanged would pin the layout forever - the whole
-                // point is that editing it in DGPlayer takes effect. Rewrite it in place instead,
-                // keeping the id so files do not pile up and the returned id stays valid.
-                File file = ControlsProfile.getProfileFile(this, profile.id);
-                data.put("id", profile.id);
-                String updated = data.toString();
-                if (file.isFile() && updated.equals(FileUtils.readString(file))) {
-                    Log.i(TAG, "controls profile \""+name+"\" unchanged, reusing id "+profile.id);
-                }
-                else {
-                    FileUtils.writeString(file, updated);
-                    Log.i(TAG, "updated controls profile \""+name+"\" (id "+profile.id+", from "+source+")");
-                }
-                return profile.id;
-            }
-
-            ControlsProfile imported = manager.importProfile(data);
-            if (imported == null) {
-                Log.w(TAG, "failed to import controls profile: "+source);
-                return 0;
-            }
-            Log.i(TAG, "imported controls profile \""+name+"\" as id "+imported.id+" (from "+source+")");
-            return imported.id;
+            return BridgeControlsProfiles.upsert(this, new JSONObject(json), source);
         }
         catch (JSONException e) {
             Log.w(TAG, "bad controls profile "+source, e);
