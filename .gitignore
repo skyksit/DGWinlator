@@ -1,0 +1,3 @@
+# Local test game payload. Commercial game data - must never reach this public
+# repository. Kept here only because dgplayer.ini authoring is done against it.
+/sizuku.zip
