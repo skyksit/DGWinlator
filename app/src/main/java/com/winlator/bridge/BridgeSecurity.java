@@ -20,7 +20,7 @@ final class BridgeSecurity {
     /**
      * SHA-256 of the shared DGPlayer dev certificate (dsam3/debug.keystore). Debug DGPlayer builds
      * are signed with it while this APK's release builds carry the skyksit release key, so a plain
-     * checkSignatures() would lock debug DGPlayer out of release DGWinlator. Pinning exactly this
+     * checkSignatures() would lock debug DGPlayer out of release WinRunner. Pinning exactly this
      * one certificate keeps the dev loop working without opening the bridge to arbitrary callers.
      */
     private static final byte[] DGP_DEBUG_CERT_SHA256 = {

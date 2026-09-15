@@ -1,10 +1,10 @@
 <p align="center">
-	<img src="logo.png" width="376" height="128" alt="DGWinlator Logo" />
+	<img src="logo.png" width="376" height="128" alt="WinRunner Logo" />
 </p>
 
-# DGWinlator (app)
+# WinRunner (app)
 
-App source for [DGWinlator](https://github.com/skyksit/DGWinlator) — a fork of [Winlator](https://github.com/brunodev85/winlator) that lets the DGPlayer app launch Windows (x86_64) games with Wine and Box64 via an exported bridge activity (`com.winlator.bridge.GameLaunchActivity`).
+App source for [WinRunner](https://github.com/skyksit/WinRunner) — a fork of [Winlator](https://github.com/brunodev85/winlator) that lets the DGPlayer app launch Windows (x86_64) games with Wine and Box64 via an exported bridge activity (`com.winlator.bridge.GameLaunchActivity`).
 
 Key differences from upstream:
 

@@ -389,7 +389,7 @@ public class GameLaunchActivity extends AppCompatActivity {
 
     /**
      * Copies the previous session's {@code *.log} files from the container-visible directories
-     * into public {@code Download/DGWinlator}, where adb and the user can actually reach them.
+     * into public {@code Download/WinRunner}, where adb and the user can actually reach them.
      * Guest programs (like the {@code _inmm} audio shim) can only write inside the app-private
      * drives, so without this hop their diagnostics are unreadable from outside.
      *
@@ -399,7 +399,7 @@ public class GameLaunchActivity extends AppCompatActivity {
     private void exportDebugLogs(String gameId, File... sourceDirs) {
         try {
             File exportDir = new File(Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS), "DGWinlator");
+                    Environment.DIRECTORY_DOWNLOADS), "WinRunner");
             for (File dir : sourceDirs) {
                 File[] logs = dir.listFiles((d, name) -> name.toLowerCase(Locale.ENGLISH).endsWith(".log"));
                 if (logs == null) continue;
