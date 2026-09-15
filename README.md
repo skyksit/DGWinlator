@@ -1,10 +1,10 @@
 <p align="center">
-	<img src="logo.png" width="376" height="128" alt="Winlator Logo" />
+	<img src="logo.png" width="376" height="128" alt="WinRunner Logo" />
 </p>
 
-# DGWinlator
+# WinRunner
 
-DGWinlator is a fork of [Winlator](https://github.com/brunodev85/winlator) — an Android application that lets you run Windows (x86_64) applications with Wine and Box86/Box64 — extended with a **DGPlayer bridge** so that the DGPlayer app can launch Windows games directly inside this container runtime.
+WinRunner is a fork of [Winlator](https://github.com/brunodev85/winlator) — an Android application that lets you run Windows (x86_64) applications with Wine and Box86/Box64 — extended with a **DGPlayer bridge** so that the DGPlayer app can launch Windows games directly inside this container runtime.
 
 The fork installs as **`com.retrople`** and therefore **coexists with stock Winlator**. The applicationId is deliberately the same byte length (12) as `com.winlator`: the prebuilt rootfs embeds `/data/data/<applicationId>/...` absolute paths (including the glibc ELF interpreter), and every shipped `.tzst` asset — rootfs, box64, graphics drivers, and the runtime-downloadable `installable_components` — has been binary-patched in place by [`scripts/patch_tzst.py`](scripts/patch_tzst.py). Any future rename must keep the 12-byte length and rerun that script.
 
@@ -37,7 +37,7 @@ This repository uses git submodules:
 
 | Path | Description |
 |------|-------------|
-| `app` | The Android app source — points at this repository's [`dgplayer-bridge`](https://github.com/skyksit/DGWinlator/tree/dgplayer-bridge) branch (the bridge commits do not exist upstream) |
+| `app` | The Android app source — points at this repository's [`dgplayer-bridge`](https://github.com/skyksit/WinRunner/tree/dgplayer-bridge) branch (the bridge commits do not exist upstream) |
 | `vortek` | [Vortek](https://github.com/brunodev85/vortek) graphics driver |
 | `gladio` | [Gladio](https://github.com/brunodev85/gladio) |
 
@@ -49,7 +49,7 @@ The `vortek` and `gladio` submodules are upstream repositories and are left unto
 
 1. Clone with submodules:
    ```
-   git clone --recurse-submodules https://github.com/skyksit/DGWinlator.git
+   git clone --recurse-submodules https://github.com/skyksit/WinRunner.git
    ```
 2. Open the `app` directory in Android Studio and build, or run:
    ```

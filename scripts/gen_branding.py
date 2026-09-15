@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate DGWinlator branding assets (wordmark logo + launcher icons).
+"""Generate WinRunner branding assets (wordmark logo + launcher icons).
 
 Palette from the app's AppThemeDark: background #3f474f, text #fafafa,
 accent #0288d1. Everything is rendered at 4x and downscaled with LANCZOS.
@@ -22,6 +22,14 @@ BG = (0x3F, 0x47, 0x4F, 255)
 TEXT = (0xFA, 0xFA, 0xFA, 255)
 ACCENT = (0x02, 0x88, 0xD1, 255)
 
+# Wordmark is drawn in two halves: BRAND_HEAD in ACCENT, BRAND_TAIL in the body color.
+# The launcher icon keeps the DG monogram - it marks the product family, and users find
+# the app by that icon, so it must not change when the wordmark does.
+BRAND_HEAD = "Win"
+BRAND_TAIL = "Runner"
+BRAND = BRAND_HEAD + BRAND_TAIL
+MONOGRAM = "DG"
+
 FONT_PATH = "C:/Windows/Fonts/segoeuib.ttf"
 if not os.path.isfile(FONT_PATH):
     FONT_PATH = "C:/Windows/Fonts/arialbd.ttf"
@@ -41,19 +49,19 @@ def fit_font(draw, text, max_w, max_h, start=400):
 
 
 def wordmark(w, h, text_color=TEXT):
-    """'DG' in accent + 'Winlator' in text_color, vertically centered, transparent bg."""
+    """BRAND_HEAD in accent + BRAND_TAIL in text_color, vertically centered, transparent bg."""
     img = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     pad = int(w * SS * 0.03)
-    font, _ = fit_font(draw, "DGWinlator", w * SS - 2 * pad, int(h * SS * 0.72))
-    l1, t1, r1, b1 = draw.textbbox((0, 0), "DG", font=font)
-    lf, tf, rf, bf = draw.textbbox((0, 0), "DGWinlator", font=font)
+    font, _ = fit_font(draw, BRAND, w * SS - 2 * pad, int(h * SS * 0.72))
+    l1, t1, r1, b1 = draw.textbbox((0, 0), BRAND_HEAD, font=font)
+    lf, tf, rf, bf = draw.textbbox((0, 0), BRAND, font=font)
     total_w = rf - lf
     x = (w * SS - total_w) // 2 - lf
     y = (h * SS - (bf - tf)) // 2 - tf
-    draw.text((x, y), "DG", font=font, fill=ACCENT)
-    draw.text((x + font.getlength("DG"), y), "Winlator", font=font, fill=text_color)
-    # underline bar under 'DG' as a small motif
+    draw.text((x, y), BRAND_HEAD, font=font, fill=ACCENT)
+    draw.text((x + font.getlength(BRAND_HEAD), y), BRAND_TAIL, font=font, fill=text_color)
+    # underline bar under BRAND_HEAD as a small motif
     bar_y = y + bf + int(h * SS * 0.04)
     if bar_y + int(h * SS * 0.045) < h * SS:
         draw.rounded_rectangle(
@@ -63,7 +71,7 @@ def wordmark(w, h, text_color=TEXT):
 
 
 def monogram(canvas, glyph_box_ratio, rounded_bg):
-    """'DG' monogram; rounded-square background when rounded_bg else transparent."""
+    """MONOGRAM; rounded-square background when rounded_bg else transparent."""
     s = canvas * SS
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -71,11 +79,11 @@ def monogram(canvas, glyph_box_ratio, rounded_bg):
         r = int(s * 0.20)
         draw.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill=BG)
     box = int(s * glyph_box_ratio)
-    font, (l, t, rr, b) = fit_font(draw, "DG", box, box)
+    font, (l, t, rr, b) = fit_font(draw, MONOGRAM, box, box)
     x = (s - (rr - l)) // 2 - l
     y = (s - (b - t)) // 2 - t
-    draw.text((x, y), "D", font=font, fill=TEXT)
-    draw.text((x + font.getlength("D"), y), "G", font=font, fill=ACCENT)
+    draw.text((x, y), MONOGRAM[0], font=font, fill=TEXT)
+    draw.text((x + font.getlength(MONOGRAM[0]), y), MONOGRAM[1:], font=font, fill=ACCENT)
     return img.resize((canvas, canvas), Image.LANCZOS)
 
 
