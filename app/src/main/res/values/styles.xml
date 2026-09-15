@@ -56,6 +56,18 @@
         <item name="preloaderBackground">@drawable/preloader_background_dark</item>
         <item name="progressBarIndeterminateImage">@drawable/progress_bar_indeterminate_dark</item>
     </style>
+    <!--
+        Invisible shell for bridge activities that finish inside onCreate (ControlsSyncActivity).
+        Do NOT call AppUtils.setActivityTheme() from such an activity - it overrides this with
+        AppThemeDark and the screen flashes.
+    -->
+    <style name="AppThemeTransparent" parent="@style/AppThemeBase">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <style name="AppThemeFullscreenLight" parent="@style/AppThemeLight">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowTranslucentStatus">true</item>
